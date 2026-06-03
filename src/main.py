@@ -4,6 +4,9 @@ import psycopg2
 import config
 from processors import DataProcessor
 from database import DatabaseLoader
+from core.logger import get_logger
+
+logger = get_logger(__name__)
 
 def main():
     db_connection = None
@@ -16,7 +19,7 @@ def main():
             user=config.DB_USER,
             password=config.DB_PASS
         )
-        print("Database connected successfully!")
+        logger.info("Database connected successfully!")
         
         # Read the sources.yml file
         with open("config/sources.yml", "r") as f:
@@ -27,7 +30,7 @@ def main():
             file_path = source.get("file_path")
             name = source.get("name")
             
-            print(f"Processing source: {name} ({file_path})")
+            logger.info(f"Processing source: {name} ({file_path})")
             
             # Extract
             my_worker = readers.get_reader(file_type)
@@ -42,12 +45,12 @@ def main():
             loader.load_data(target_table=name, valid_records=valid_records)
 
     except Exception as e:
-        print(f"Error executing script: {e}")
+        logger.error(f"Error executing script: {e}")
         
     finally:
         if db_connection:
             db_connection.close()
-            print("Database connection closed.")
+            logger.info("Database connection closed.")
 
 if __name__ == "__main__":
     main()

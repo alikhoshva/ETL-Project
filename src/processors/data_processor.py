@@ -1,3 +1,7 @@
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 class DataProcessor:
     def __init__(self):
         pass
@@ -14,7 +18,7 @@ class DataProcessor:
                    valid_records are safe to insert into the database.
                    invalid_records failed validation and should be logged or skipped.
         """
-        print("Transforming and cleaning data...")
+        logger.info("Transforming and cleaning data...")
         
         # Stub: Implement data validation and cleaning here
         # E.g., removing nulls, fixing data types, filtering out bad records.

@@ -1,3 +1,7 @@
+from core.logger import get_logger
+
+logger = get_logger(__name__)
+
 class DatabaseLoader:
     def __init__(self, db_connection):
         """
@@ -16,7 +20,7 @@ class DatabaseLoader:
             target_table (str): The name of the table to insert data into.
             valid_records (list): The cleaned and validated data to be inserted.
         """
-        print(f"Loading {len(valid_records)} records into {target_table}...")
+        logger.info(f"Loading {len(valid_records)} records into {target_table}...")
         
         # Stub: Implement database insertion logic here.
         # E.g., construct an INSERT statement and execute it via the cursor.

@@ -1,6 +1,9 @@
+import yaml
 import readers
 import psycopg2
 import config
+from processors import DataProcessor
+from database import DatabaseLoader
 
 def main():
     db_connection = None
@@ -15,13 +18,28 @@ def main():
         )
         print("Database connected successfully!")
         
-        # Define file details
-        #file_type = "csv" 
-        #file_path = "data/inbound/customers.csv"
-
-        # Get the right worker and process the file
-        #my_worker = readers.get_reader(file_type)
-        #my_worker.read_file(file_path, db_connection)
+        # Read the sources.yml file
+        with open("config/sources.yml", "r") as f:
+            sources_config = yaml.safe_load(f)
+            
+        for source in sources_config.get("sources", []):
+            file_type = source.get("file_type")
+            file_path = source.get("file_path")
+            name = source.get("name")
+            
+            print(f"Processing source: {name} ({file_path})")
+            
+            # Extract
+            my_worker = readers.get_reader(file_type)
+            raw_data = my_worker.read_file(file_path)
+            
+            # Transform
+            processor = DataProcessor()
+            valid_records, invalid_records = processor.clean_data(raw_data)
+            
+            # Load
+            loader = DatabaseLoader(db_connection)
+            loader.load_data(target_table=name, valid_records=valid_records)
 
     except Exception as e:
         print(f"Error executing script: {e}")

@@ -1,6 +1,8 @@
 from .base_reader import BaseReader
 
 class JSONReader(BaseReader):
-    def read_file(self, file_path, db_connection):
-        print(f"Reading JSON from {file_path}")
-        # Insert your json.load logic here
+    def read_file(self, file_path):
+        print(f"Extracting JSON from {file_path}")
+        # Stub: Implement json.load logic here
+        # Return raw data extracted from the JSON
+        return []

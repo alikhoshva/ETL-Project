@@ -1,4 +1,4 @@
-from base_reader import BaseReader
+from .base_reader import BaseReader
 
 class JSONReader(BaseReader):
     def read_file(self, file_path, db_connection):

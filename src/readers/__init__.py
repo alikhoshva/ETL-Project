@@ -1,5 +1,5 @@
-from csv_reader import CSVReader
-from json_reader import JSONReader
+from .csv_reader import CSVReader
+from .json_reader import JSONReader
 
 def get_reader(file_type: str):
     """The Traffic Cop: Returns the correct reader based on the file type."""

@@ -48,7 +48,7 @@ def main():
             loader.load_data(target_table=name, valid_records=valid_records)
 
     except Exception as e:
-        logger.error(f"Error executing script: {e}")
+        logger.critical(f"Error executing script: {e}")
         
     finally:
         if db_connection:

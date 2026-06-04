@@ -16,15 +16,15 @@ class JSONReader(BaseReader):
             return df
             
         except FileNotFoundError:
-            logger.error(f"File not found at path: {file_path}")
+            logger.critical(f"File not found at path: {file_path}")
             return pd.DataFrame()
             
         except ValueError as e:
             # Catching ValueError handles completely empty files or invalid JSON formatting
-            logger.error(f"Failed to parse JSON at {file_path}. It may be empty or improperly formatted: {e}")
+            logger.critical(f"Failed to parse JSON at {file_path}. It may be empty or improperly formatted: {e}")
             return pd.DataFrame()
             
         except Exception as e:
             # Catch-all for any other unexpected errors
-            logger.error(f"An unexpected error occurred reading {file_path}: {e}")
+            logger.critical(f"An unexpected error occurred reading {file_path}: {e}")
             return pd.DataFrame()

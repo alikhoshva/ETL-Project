@@ -15,14 +15,14 @@ class CSVReader(BaseReader):
             return df
             
         except FileNotFoundError:
-            logger.error(f"File not found at path: {file_path}")
+            logger.critical(f"File not found at path: {file_path}")
             return pd.DataFrame()
             
         except pd.errors.EmptyDataError:
-            logger.error(f"The CSV at {file_path} is empty.")
+            logger.critical(f"The CSV at {file_path} is empty.")
             return pd.DataFrame()
             
         except Exception as e:
             # Catch-all for any other unexpected errors
-            logger.error(f"An unexpected error occurred reading {file_path}: {e}")
+            logger.critical(f"An unexpected error occurred reading {file_path}: {e}")
             return pd.DataFrame()

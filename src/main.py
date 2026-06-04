@@ -2,6 +2,7 @@ import yaml
 import readers
 import psycopg2
 import config
+
 from processors import DataProcessor
 from database import DatabaseLoader
 from core.logger import get_logger
@@ -35,6 +36,8 @@ def main():
             # Extract
             my_worker = readers.get_reader(file_type)
             raw_data = my_worker.read_file(file_path)
+
+            print(raw_data)
             
             # Transform
             processor = DataProcessor()

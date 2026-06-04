@@ -19,7 +19,7 @@ def get_logger(name):
         console_handler.setLevel(logging.CRITICAL)
         
         # Create formatter and add it to the handlers
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter('[%(asctime)s] [%(levelname)-8s] [%(name)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
         

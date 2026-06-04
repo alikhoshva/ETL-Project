@@ -1,5 +1,12 @@
 import psycopg2
+
+from psycopg2.extras import execute_values
+import pandas as pd
+
+
+from psycopg2 import sql
 import config
+
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -28,16 +35,82 @@ class DatabaseLoader:
             self.db_connection.close()
             logger.info("Database connection closed.")
 
+    def _get_sql_type(self, value):
+        """Infers a PostgreSQL data type from a Python value."""
+        if isinstance(value, bool):
+            return "BOOLEAN"
+        elif isinstance(value, int):
+            return "BIGINT"
+        elif isinstance(value, float):
+            return "DOUBLE PRECISION"
+        else:
+            return "TEXT"
+
+    def _ensure_table_exists(self, target_table, valid_records):
+        """Creates the table dynamically based on the data if it doesn't exist."""
+        sample_record = valid_records[0]
+        
+        column_defs = []
+        for col_name, value in sample_record.items():
+            sql_type = self._get_sql_type(value)
+            column_defs.append(sql.SQL("{} {}").format(
+                sql.Identifier(col_name),
+                sql.SQL(sql_type)
+            ))
+            
+        create_query = sql.SQL("CREATE TABLE IF NOT EXISTS {} ({})").format(
+            sql.Identifier(target_table),
+            sql.SQL(", ").join(column_defs)
+        )
+        
+        with self.db_connection.cursor() as cursor:
+            cursor.execute(create_query)
+        self.db_connection.commit()
+        logger.info(f"Ensured table '{target_table}' exists with inferred schema.")
+
     def load_data(self, target_table, valid_records):
         """
-        Loads the valid records into the target database table.
+        Loads records into the target database table.
         
         Args:
             target_table (str): The name of the table to insert data into.
-            valid_records (list): The cleaned and validated data to be inserted.
+            valid_records (list): A list of dictionaries representing the cleaned records.
         """
+        # 1. Check if the list is empty
+        if not valid_records:
+            logger.warning(f"No records provided to load for {target_table}.")
+            return
+
         logger.info(f"Loading {len(valid_records)} records into {target_table}...")
         
-        # Stub: Implement database insertion logic here.
-        # E.g., construct an INSERT statement and execute it via the cursor.
-        pass
+        # 2. Ensure the table exists before attempting to insert
+        self._ensure_table_exists(target_table, valid_records)
+        
+        # 3. Extract column names directly from the first dictionary
+        columns = list(valid_records[0].keys())
+        
+        # 3. Convert the list of dicts into a list of tuples (required by psycopg2)
+        # We ensure the values are fetched in the exact order of the columns
+        values = [tuple(record[col] for col in columns) for record in valid_records]
+        
+        # 4. Construct the query for execute_values
+        # Note: execute_values expects a single %s at the end
+        insert_query = sql.SQL("INSERT INTO {table} ({fields}) VALUES %s").format(
+            table=sql.Identifier(target_table),
+            fields=sql.SQL(", ").join(map(sql.Identifier, columns))
+        )
+
+        try:
+            with self.db_connection.cursor() as cursor:
+                # 5. Use execute_values for high-performance bulk insertion
+                # Converting the SQL object to a string ensures maximum compatibility
+                query_string = insert_query.as_string(cursor)
+                execute_values(cursor, query_string, values)
+            
+            self.db_connection.commit()
+            logger.info(f"Successfully loaded and committed {len(valid_records)} records to {target_table}!")
+            
+        except Exception as e:
+            self.db_connection.rollback()
+            logger.error(f"Failed to load data into {target_table}. Transaction rolled back: {e}")
+            raise

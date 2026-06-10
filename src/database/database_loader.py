@@ -35,6 +35,14 @@ class DatabaseLoader:
             self.db_connection.close()
             logger.info("Database connection closed.")
 
+    def __enter__(self):
+        """Enter the runtime context related to this object."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit the runtime context related to this object and close the connection."""
+        self.close()
+
     def _get_sql_type(self, value):
         """Infers a PostgreSQL data type from a Python value."""
         if isinstance(value, bool):
@@ -101,16 +109,16 @@ class DatabaseLoader:
         )
 
         try:
-            with self.db_connection.cursor() as cursor:
-                # 5. Use execute_values for high-performance bulk insertion
-                # Converting the SQL object to a string ensures maximum compatibility
-                query_string = insert_query.as_string(cursor)
-                execute_values(cursor, query_string, values)
+            # Using the connection as a context manager automatically handles commit/rollback
+            with self.db_connection:
+                with self.db_connection.cursor() as cursor:
+                    # 5. Use execute_values for high-performance bulk insertion
+                    # Converting the SQL object to a string ensures maximum compatibility
+                    query_string = insert_query.as_string(cursor)
+                    execute_values(cursor, query_string, values)
             
-            self.db_connection.commit()
             logger.info(f"Successfully loaded and committed {len(valid_records)} records to {target_table}!")
             
         except Exception as e:
-            self.db_connection.rollback()
             logger.error(f"Failed to load data into {target_table}. Transaction rolled back: {e}")
             raise

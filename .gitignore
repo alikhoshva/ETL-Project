@@ -5,5 +5,4 @@ __pycache__/
 .env
 app.log
 .pytest_cache/
-
-
+.coverage

@@ -1,7 +1,5 @@
 sources:
-  - name: customers
-    file_type: csv
-    file_path: data/customers.csv
-  - name: sales
-    file_type: json
-    file_path: data/sales.json
+  - name: movies
+    file_path: data/movies.csv
+  - name: links
+    file_path: data/links.csv

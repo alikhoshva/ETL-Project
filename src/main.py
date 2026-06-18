@@ -1,4 +1,7 @@
 import yaml
+import pandas as pd
+import json
+import os
 import readers
 
 from processors import DataProcessor
@@ -14,39 +17,64 @@ def main():
             sources_config = yaml.safe_load(f)
     except Exception as e:
         logger.critical(f"Failed to load configuration from 'config/sources.yml': {e}")
-        return  # Exit early if we don't have sources to process
+        return  
         
+    # Find paths
+    movies_path = None
+    links_path = None
+    for source in sources_config.get("sources", []):
+        if source.get("name") == "movies":
+            movies_path = source.get("file_path")
+        elif source.get("name") == "links":
+            links_path = source.get("file_path")
+            
+    if not movies_path or not links_path:
+        logger.critical("Could not find paths for 'movies' or 'links' in config.")
+        return
+
     # 2. Database Connection Phase
     try:
         loader = DatabaseLoader()
     except Exception as e:
         logger.critical(f"DatabaseLoader failed to initialize: {e}")
-        return  # Exit early if there's no DB connection
+        return  
         
     # 3. ETL Processing Phase
     with loader:
-        for source in sources_config.get("sources", []):
-            file_type = source.get("file_type")
-            file_path = source.get("file_path")
-            name = source.get("name")
+        try:
+            logger.info("Extracting CSV data...")
+            csv_reader = readers.get_reader("csv")
+            movies_df = csv_reader.read_file(movies_path)
+            links_df = csv_reader.read_file(links_path)
             
-            logger.info(f"Processing source: {name} ({file_path})")
+            if movies_df.empty or links_df.empty:
+                logger.error("Failed to load one of the base datasets.")
+                return
+                
+            # Transform & Enrich
+            cache_file = "data/tmdb_cache.json"
+            tmdb_cache = {}
+            if os.path.exists(cache_file):
+                logger.info(f"Loading offline TMDB API cache from {cache_file}...")
+                with open(cache_file, "r") as f:
+                    tmdb_cache = json.load(f)
+            else:
+                logger.warning(f"No TMDB cache found at {cache_file}. Please run fetch_tmdb_cache.py first!")
+                return
+                
+            processor = DataProcessor()
             
-            try:
-                # Extract
-                my_worker = readers.get_reader(file_type)
-                raw_data = my_worker.read_file(file_path)
-                
-                # Transform
-                processor = DataProcessor()
-                valid_records, invalid_records = processor.clean_data(raw_data)
-                
-                # Load
-                loader.load_data(target_table=name, valid_records=valid_records)
-                
-            except Exception as e:
-                logger.error(f"Error processing source '{name}' ({file_path}): {e}")
-                # Continue to the next source instead of crashing the pipeline
+            enriched_df = processor.merge_and_enrich(movies_df, links_df, tmdb_cache)
+            
+            # Clean
+            valid_records, invalid_records = processor.clean_data(enriched_df)
+            
+            # Load
+            loader.load_data(target_table="movies_enriched", valid_records=valid_records)
+            
+        except Exception as e:
+            logger.error(f"Error processing pipeline: {e}")
 
 if __name__ == "__main__":
     main()
+

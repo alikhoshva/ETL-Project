@@ -1,11 +1,10 @@
 from .csv_reader import CSVReader
-from .json_reader import JSONReader
+from .api_reader import TMDBApiReader
 
 def get_reader(file_type: str):
     """The Traffic Cop: Returns the correct reader based on the file type."""
     readers = {
-        'csv': CSVReader(),
-        'json': JSONReader()
+        'csv': CSVReader()
     }
     
     # Grab the right worker, or throw an error if the type doesn't exist

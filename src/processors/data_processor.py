@@ -43,10 +43,17 @@ class DataProcessor:
         
         return valid_records, invalid_records
 
-    def merge_and_enrich(self, movies_df: pd.DataFrame, links_df: pd.DataFrame, tmdb_cache: dict) -> pd.DataFrame:
+    def process(self, datasets: dict) -> pd.DataFrame:
         """
-        Merges the movies and links dataframes, and enriches them via the pre-fetched TMDB JSON cache.
+        Merges the movies and links dataframes, and enriches them via the TMDB JSON cache.
         """
+        movies_df = datasets.get('movies')
+        links_df = datasets.get('links')
+        tmdb_cache = datasets.get('tmdb', {})
+        
+        if movies_df is None or links_df is None:
+            raise ValueError("Datasets must contain 'movies' and 'links'")
+            
         logger.info("Merging movies and links datasets...")
         # Clean both dataframes lightly
         movies_df = movies_df.dropna(subset=['movieId']).drop_duplicates(subset=['movieId'])

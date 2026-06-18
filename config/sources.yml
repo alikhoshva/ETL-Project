@@ -1,5 +1,12 @@
 sources:
   - name: movies
+    type: csv
     file_path: data/movies.csv
   - name: links
+    type: csv
     file_path: data/links.csv
+  - name: tmdb
+    type: json
+    file_path: data/tmdb_cache.json
+target:
+  table_name: movies_enriched

@@ -1,12 +1,8 @@
 import psycopg2
-
 from psycopg2.extras import execute_values
-import pandas as pd
-
-
 from psycopg2 import sql
-import config
 
+import config
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,18 +12,14 @@ class DatabaseLoader:
         """
         Initializes the DatabaseLoader and establishes the database connection.
         """
-        try:
-            self.db_connection = psycopg2.connect(
-                host=config.DB_HOST,
-                port=config.DB_PORT,
-                database=config.DB_NAME,
-                user=config.DB_USER,
-                password=config.DB_PASS
-            )
-            logger.info("Database connected successfully!")
-        except Exception as e:
-            logger.critical(f"Failed to connect to the database: {e}")
-            raise
+        self.db_connection = psycopg2.connect(
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASS
+        )
+        logger.info("Database connected successfully!")
 
     def close(self):
         """Closes the database connection."""
@@ -108,17 +100,12 @@ class DatabaseLoader:
             fields=sql.SQL(", ").join(map(sql.Identifier, columns))
         )
 
-        try:
-            # Using the connection as a context manager automatically handles commit/rollback
-            with self.db_connection:
-                with self.db_connection.cursor() as cursor:
-                    # 5. Use execute_values for high-performance bulk insertion
-                    # Converting the SQL object to a string ensures maximum compatibility
-                    query_string = insert_query.as_string(cursor)
-                    execute_values(cursor, query_string, values)
-            
-            logger.info(f"Successfully loaded and committed {len(valid_records)} records to {target_table}!")
-            
-        except Exception as e:
-            logger.error(f"Failed to load data into {target_table}. Transaction rolled back: {e}")
-            raise
+        # Using the connection as a context manager automatically handles commit/rollback
+        with self.db_connection:
+            with self.db_connection.cursor() as cursor:
+                # 5. Use execute_values for high-performance bulk insertion
+                # Converting the SQL object to a string ensures maximum compatibility
+                query_string = insert_query.as_string(cursor)
+                execute_values(cursor, query_string, values)
+        
+        logger.info(f"Successfully loaded and committed {len(valid_records)} records to {target_table}!")

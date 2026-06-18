@@ -69,11 +69,7 @@ class DataProcessor:
         # Extract API data from cache
         logger.info(f"Extracting TMDB API data from cache for {len(merged_df)} movies...")
         
-        api_data_list = []
-        for tmdb_id in merged_df['tmdbId']:
-            str_id = str(tmdb_id)
-            if str_id in tmdb_cache:
-                api_data_list.append(tmdb_cache[str_id])
+        api_data_list = [tmdb_cache[str(tmdb_id)] for tmdb_id in merged_df['tmdbId'] if str(tmdb_id) in tmdb_cache]
         
         # Convert API data to DataFrame
         api_df = pd.DataFrame(api_data_list)

@@ -1,5 +1,4 @@
 from .csv_reader import CSVReader
-from .api_reader import TMDBApiReader
 from .json_reader import JSONReader
 
 def get_reader(file_type: str):

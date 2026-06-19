@@ -24,7 +24,7 @@ def process_file(uploaded_file, file_type, table_name):
             
             return True, "Success", len(valid_records), len(invalid_records)
     except Exception as e:
-        logger.error(f"Error processing upload: {e}")
+        logger.exception("Error processing upload")
         return False, str(e), 0, 0
 
 def main():

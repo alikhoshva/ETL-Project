@@ -66,6 +66,6 @@ class TMDBApiReader:
                 return None
                 
         except requests.RequestException as e:
-            logger.error(f"Request error for TMDB ID {tmdb_id}: {e}")
+            logger.exception(f"Request error for TMDB ID {tmdb_id}")
             return None
 

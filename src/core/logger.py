@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime
+import config
 
 # Initialize run variables globally so all loggers share the same timestamp
 _run_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -15,8 +16,8 @@ def get_logger(name):
     
     # Only configure if it doesn't already have handlers to avoid duplicate logs
     if not logger.handlers:
-        # Determine log level from environment
-        env_level = os.getenv("LOG_LEVEL", "INFO").upper()
+        # Determine log level from config
+        env_level = config.LOG_LEVEL.upper()
         log_level = getattr(logging, env_level, logging.INFO)
         logger.setLevel(log_level)
         

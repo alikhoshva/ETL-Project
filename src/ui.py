@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import readers
 from processors import DataProcessor
 from database import DatabaseLoader
@@ -13,6 +14,9 @@ def process_file(uploaded_file, file_type, table_name):
             my_worker = readers.get_reader(file_type)
             # pandas read_csv and read_json accept file-like objects like uploaded_file
             raw_data = my_worker.read_file(uploaded_file)
+            
+            if not isinstance(raw_data, pd.DataFrame):
+                raw_data = pd.DataFrame(raw_data)
             
             if raw_data.empty:
                 return False, "Failed to read file or file is empty.", 0, 0

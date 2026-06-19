@@ -20,7 +20,7 @@ class TMDBApiReader:
             api_key: The API key for TMDB. If not provided, it will attempt
                      to load it from the configuration.
         """
-        self.api_key = api_key or getattr(config, 'TMDB_API_KEY', None)
+        self.api_key = api_key or config.TMDB_API_KEY
         self.base_url = "https://api.themoviedb.org/3/movie"
         
         if not self.api_key:

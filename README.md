@@ -1,84 +1,57 @@
-# Movie ETL Pipeline Project
+# Movie ETL Pipeline
 
-This project is an ETL (Extract, Transform, Load) pipeline built in Python. It is designed to process the MovieLens dataset, enrich it with data from the TMDB API, and load the cleaned and transformed data into a PostgreSQL database.
+A configuration-driven ETL (Extract, Transform, Load) pipeline built in Python. This project processes the MovieLens dataset, enriches it with TMDB API metadata, and loads a normalized schema into a PostgreSQL database.
 
-## Features
+## Key Features
 
-- **Data Extraction**: Supports reading from CSV and JSON sources.
-- **TMDB Data Caching**: Includes a standalone script (`fetch_tmdb_cache.py`) to incrementally fetch and cache TMDB API responses locally to avoid rate limits and speed up pipeline execution.
-- **Data Processing**: Cleans and transforms raw data before loading.
-- **Database Loading**: Loads processed valid records into a target PostgreSQL database.
-- **Configuration Driven**: The data sources and target table are configured via `config/sources.yml`.
-- **Streamlit UI**: Provides an interactive web interface (`src/ui.py`) for uploading and processing files manually.
+- **Configuration-Driven Architecture**: Manage data sources, dynamic transformations (merges, cleanups), and target tables entirely via `config/sources.yml`.
+- **Data Normalization**: Processes raw data into a modular, normalized database schema, including the automated execution of external SQL view definitions.
+- **TMDB Metadata Caching**: Incrementally fetches and caches TMDB API responses locally (`src/fetch_tmdb_cache.py`) to bypass rate limits and accelerate pipeline execution.
+- **Dynamic Orchestration**: Built-in pipeline orchestrator that dynamically reads, transforms, and loads datasets based on the defined YAML configuration.
 
-## Project Structure
+## Setup
 
-```
-├── config/
-│   └── sources.yml           # Pipeline configuration (sources and target)
-├── data/                     # Data directory (MovieLens CSVs, TMDB cache)
-├── src/
-│   ├── core/                 # Core utilities like logging
-│   ├── database/             # Database connection and loading logic
-│   ├── processors/           # Data cleaning and transformation logic
-│   ├── readers/              # CSV, JSON, and API readers
-│   ├── fetch_tmdb_cache.py   # Script to fetch and cache TMDB data
-│   ├── main.py               # Main CLI entry point for the ETL pipeline
-│   ├── pipeline.py           # Core pipeline orchestration logic
-│   └── ui.py                 # Streamlit web application
-├── tests/                    # Pytest test suite
-├── .env                      # Environment variables (e.g., TMDB_API_KEY, DB credentials)
-└── requirements.txt          # Python dependencies
-```
-
-## Setup & Installation
-
-1. **Install dependencies**:
-   Ensure you have a virtual environment set up, then install the required packages:
+1. **Install Dependencies**: 
    ```bash
    pip install -r requirements.txt
    ```
-
-2. **Environment Variables**:
-   Create a `.env` file in the project root and populate it with your necessary credentials:
+2. **Environment Configuration**: 
+   Create a `.env` file in the project root with your credentials:
    ```env
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=mydatabase
+   DB_USER=myuser
+   DB_PASS=mypassword
    TMDB_API_KEY=your_api_key_here
-   # Add your database connection variables here
+   LOG_LEVEL=INFO
    ```
-
-3. **Prepare Data**:
-   Ensure the MovieLens dataset files (`movies.csv`, `links.csv`, etc.) are unzipped into the `data/` directory.
+3. **Data Preparation**: 
+   Ensure the MovieLens datasets (e.g., `movies.csv`, `links.csv`) are unzipped into the `data/` directory.
 
 ## Usage
 
-### 1. Cache TMDB Data
-
-Before running the main pipeline, fetch and cache the TMDB metadata. This script reads `data/links.csv` and queries the TMDB API, saving the results to `data/tmdb_cache.json`.
-
+### 1. Build TMDB Cache
+Fetch and cache required TMDB metadata before running the main pipeline.
 ```bash
 python src/fetch_tmdb_cache.py
 ```
 
-### 2. Run the CLI Pipeline
-
-Once the cache is built and `config/sources.yml` is configured correctly, run the main ETL pipeline to process the data and load it into your database:
-
+### 2. Run ETL Pipeline
+Execute the dynamic orchestrator to process the data and load it into PostgreSQL.
 ```bash
 python src/main.py
 ```
 
-### 3. Run the Streamlit UI
-
-To launch the web interface for manual file processing:
-
+### 3. Streamlit UI (Optional)
+Launch the interactive web interface for manual file processing.
 ```bash
 streamlit run src/ui.py
 ```
 
 ## Testing
 
-To run the test suite:
-
+Run the test suite using pytest:
 ```bash
 pytest
 ```

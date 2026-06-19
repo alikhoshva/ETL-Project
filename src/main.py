@@ -10,20 +10,18 @@ def main():
     with open("config/sources.yml", "r") as f:
         config = yaml.safe_load(f)
         
-    sources_config = config.get("sources", [])
-    target_config = config.get("target", {})
-    target_table = target_config.get("table_name", "movies_enriched")
-
-    if not sources_config:
-        logger.critical("No sources found in config.")
+    datasets_config = config.get("datasets", [])
+    
+    if not datasets_config:
+        logger.critical("No datasets found in config.")
         return
 
     # 2. Data Extraction Phase
-    datasets = load_datasets(sources_config)
+    datasets = load_datasets(datasets_config)
 
     # 3. Processing and Loading Phase
     with DatabaseLoader() as loader:
-        run_pipeline(loader, datasets, target_table)
+        run_pipeline(loader, datasets, config)
 
 if __name__ == "__main__":
     main()

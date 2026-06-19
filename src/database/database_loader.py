@@ -109,3 +109,17 @@ class DatabaseLoader:
                 execute_values(cursor, query_string, values)
         
         logger.info(f"Successfully loaded and committed {len(valid_records)} records to {target_table}!")
+
+    def create_view(self, view_name, query):
+        """
+        Executes a SQL query to create a database view.
+        
+        Args:
+            view_name (str): The name of the view to create.
+            query (str): The CREATE VIEW SQL query.
+        """
+        logger.info(f"Creating view '{view_name}'...")
+        with self.db_connection:
+            with self.db_connection.cursor() as cursor:
+                cursor.execute(query)
+        logger.info(f"Successfully created view '{view_name}'!")

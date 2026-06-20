@@ -8,6 +8,8 @@ A configuration-driven ETL (Extract, Transform, Load) pipeline built in Python. 
 - **Data Normalization**: Processes raw data into a modular, normalized database schema, including the automated execution of external SQL view definitions.
 - **TMDB Metadata Caching**: Incrementally fetches and caches TMDB API responses locally (`src/fetch_tmdb_cache.py`) to bypass rate limits and accelerate pipeline execution.
 - **Dynamic Orchestration**: Built-in pipeline orchestrator that dynamically reads, transforms, and loads datasets based on the defined YAML configuration.
+- **Interactive UI Analytics**: Streamlit interface (`src/ui.py`) for one-click repository-based pipeline execution, real-time log monitoring, and interactive data summaries.
+- **Professional Standard**: Codebase utilizes structured docstrings and a high-impact, streamlined testing suite focused on critical paths to minimize maintenance overhead.
 
 ## Setup
 
@@ -44,14 +46,14 @@ python src/main.py
 ```
 
 ### 3. Streamlit UI (Optional)
-Launch the interactive web interface for manual file processing.
+Launch the interactive web interface for pipeline execution, data analytics, and real-time log monitoring.
 ```bash
 streamlit run src/ui.py
 ```
 
 ## Testing
 
-Run the test suite using pytest:
+Run the streamlined test suite using pytest:
 ```bash
 pytest
 ```

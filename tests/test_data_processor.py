@@ -25,9 +25,12 @@ def test_data_processor_clean_data(raw_data):
     # Valid remaining: Alice, Bob, Dave
     
     assert len(valid) == 3
-    assert len(invalid) == 1
-    assert invalid[0]['name'] == 'Charlie'
+    assert len(invalid) == 3
     
+    invalid_names = [v['name'] for v in invalid]
+    assert 'Charlie' in invalid_names
+    assert 'Bob' in invalid_names
+    assert 'Eve' in invalid_names
     valid_names = [v['name'] for v in valid]
     assert 'Alice' in valid_names
     assert 'Bob' in valid_names
@@ -47,14 +50,12 @@ def test_data_processor_merge_datasets():
     assert merged_df.iloc[0]['val_right'] == 'X'
 
 def test_data_processor_process_tmdb():
-    tmdb_cache = {
-        "123": {
-            "id": 123,
-            "budget": 500000,
-            "genres": [{"id": 1, "name": "Action"}],
-            "production_companies": [{"id": 1, "name": "Fake Studio"}]
-        }
-    }
+    tmdb_cache = pd.DataFrame([{
+        "id": 123,
+        "budget": 500000,
+        "genres": [{"id": 1, "name": "Action"}],
+        "production_companies": [{"id": 1, "name": "Fake Studio"}]
+    }])
     
     processor = DataProcessor()
     df = processor.process_tmdb(tmdb_cache)

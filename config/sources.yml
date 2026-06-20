@@ -2,12 +2,30 @@ datasets:
   - name: movies
     type: csv
     file_path: data/movies.csv
+    target_table: stg_movies
+    pk: movieId
+    schema:
+      movieId: int
+      title: str
+      genres: str
   - name: links
     type: csv
     file_path: data/links.csv
+    target_table: stg_links
+    pk: movieId
+    schema:
+      movieId: int
+      imdbId: int
+      tmdbId: float
   - name: tmdb
     type: json
     file_path: data/tmdb_cache.json
+    target_table: stg_tmdb
+    pk: id
+    schema:
+      id: int
+      title: str
+      budget: float
     
 transformations:
   - name: process_movies_and_links
@@ -17,12 +35,14 @@ transformations:
     join_on: movieId
     how: inner
     target_table: movies
+    pk: movieId
     
   - name: process_tmdb_cache
     type: custom_python
     function: process_tmdb
     input_dataset: tmdb
     target_table: tmdb_data
+    pk: tmdbId
 
 views:
   - name: movies_enriched_view

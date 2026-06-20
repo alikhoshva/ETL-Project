@@ -35,28 +35,46 @@ def load_datasets(sources_config):
         
     return datasets
 
-def transform_data(datasets, config):
+def process_and_load_datasets(loader, datasets, config, processor):
     """
-    Executes the data transformations based on configuration.
-    
-    Args:
-        datasets: A dictionary mapping dataset names to loaded DataFrames.
-        config: The complete configuration dictionary detailing transformations.
+    Processes and loads raw datasets into the database.
+    """
+    for source in config.get('datasets', []):
+        name = source.get('name')
+        target_table = source.get('target_table')
+        pk = source.get('pk')
+        schema = source.get('schema')
         
-    Returns:
-        A dictionary mapping target table names to their valid_records lists.
+        if name not in datasets:
+            continue
+            
+        logger.info(f"Processing raw dataset: {name}")
+        df = datasets[name]
+        
+        df = processor.enforce_schema(df, schema)
+        
+        valid_records, invalid_records = processor.clean_data(df, pk=pk)
+        
+        if valid_records and target_table:
+            loader.load_data(target_table=target_table, valid_records=valid_records, pk=pk)
+            
+        if invalid_records:
+            loader.load_rejects(name, invalid_records, "Validation/Schema Failed")
+
+def transform_data(loader, datasets, config, processor):
     """
-    processor = DataProcessor()
-    transformed_records = {}
-    
+    Executes the data transformations and loads them to the database.
+    """
     transformations = config.get('transformations', [])
     if not transformations:
         logger.warning("No transformations defined in config.")
+        return
         
     for transform in transformations:
         name = transform.get('name')
         t_type = transform.get('type')
         target_table = transform.get('target_table')
+        pk = transform.get('pk')
         
         logger.info(f"Executing transformation: {name} (Type: {t_type})")
         
@@ -84,23 +102,15 @@ def transform_data(datasets, config):
         else:
             raise ValueError(f"Unknown transformation type: {t_type}")
             
-        valid_records, _ = processor.clean_data(processed_df)
-        transformed_records[target_table] = valid_records
+        valid_records, invalid_records = processor.clean_data(processed_df, pk=pk)
         
-    return transformed_records
-
-def load_data_to_db(loader, transformed_records, config):
-    """
-    Loads transformed data into the database and creates views.
-    
-    Args:
-        loader: The DatabaseLoader instance to use for data loading.
-        transformed_records: A dict mapping target table names to lists of valid records.
-        config: The complete configuration dictionary detailing views.
-    """
-    for target_table, valid_records in transformed_records.items():
-        loader.load_data(target_table=target_table, valid_records=valid_records)
-
+        if valid_records and target_table:
+            loader.load_data(target_table=target_table, valid_records=valid_records, pk=pk)
+            
+        if invalid_records:
+            loader.load_rejects(name, invalid_records, "Validation Failed")
+            
+def setup_views(loader, config):
     for view in config.get('views', []):
         view_name = view.get('name')
         sql_file = view.get('sql_file')
@@ -122,5 +132,10 @@ def run_pipeline(loader, datasets, config):
     Returns:
         None
     """
-    transformed_records = transform_data(datasets, config)
-    load_data_to_db(loader, transformed_records, config)
+    processor = DataProcessor()
+    
+    process_and_load_datasets(loader, datasets, config, processor)
+    
+    transform_data(loader, datasets, config, processor)
+    
+    setup_views(loader, config)

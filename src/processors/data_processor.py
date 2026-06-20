@@ -15,30 +15,64 @@ class DataProcessor:
         """
         self.validation_rules = validation_rules or []
         
-    def clean_data(self, raw_data: pd.DataFrame):
+    def enforce_schema(self, df: pd.DataFrame, schema: dict) -> pd.DataFrame:
+        """
+        Enforces types on a dataframe based on a schema dict.
+        """
+        if not schema:
+            return df
+            
+        logger.info(f"Enforcing schema...")
+        type_mapping = {
+            'int': 'Int64',
+            'float': 'Float64',
+            'str': 'string',
+            'bool': 'boolean'
+        }
+        for col, col_type in schema.items():
+            if col in df.columns:
+                pd_type = type_mapping.get(col_type, col_type)
+                try:
+                    df[col] = df[col].astype(pd_type)
+                except Exception as e:
+                    logger.warning(f"Failed to cast column {col} to {pd_type}: {e}")
+                    if col_type in ('int', 'float'):
+                        df[col] = pd.to_numeric(df[col], errors='coerce').astype(pd_type)
+                    else:
+                        df[col] = df[col].astype(str).astype(pd_type)
+        return df
+
+    def clean_data(self, raw_data: pd.DataFrame, pk: str = None):
         """
         Applies basic cleaning and dynamic validation rules to the raw data.
         
         Args:
             raw_data: The input Pandas DataFrame to be cleaned.
+            pk: The primary key column to use for deduplication.
             
         Returns:
             A tuple containing a list of valid records and a list of invalid records.
         """
         logger.info("Transforming and cleaning data...")
 
-        cleaned_data = raw_data.dropna().drop_duplicates()
-        
-        if not self.validation_rules:
-            return cleaned_data.to_dict('records'), []
+        if raw_data.empty:
+            return [], []
 
-        overall_mask = pd.Series(True, index=cleaned_data.index)
+        overall_mask = pd.Series(True, index=raw_data.index)
         
-        for rule in self.validation_rules:
-            overall_mask = overall_mask & rule(cleaned_data)
+        overall_mask = overall_mask & ~raw_data.isna().any(axis=1)
+        
+        if pk and pk in raw_data.columns:
+            overall_mask = overall_mask & ~raw_data.duplicated(subset=[pk], keep='first')
+        else:
+            overall_mask = overall_mask & ~raw_data.duplicated(keep='first')
             
-        valid_df = cleaned_data[overall_mask]
-        invalid_df = cleaned_data[~overall_mask] 
+        if self.validation_rules:
+            for rule in self.validation_rules:
+                overall_mask = overall_mask & rule(raw_data)
+            
+        valid_df = raw_data[overall_mask]
+        invalid_df = raw_data[~overall_mask] 
         
         valid_records = valid_df.to_dict('records')
         invalid_records = invalid_df.to_dict('records')
@@ -77,20 +111,17 @@ class DataProcessor:
             
         return merged_df
         
-    def process_tmdb(self, tmdb_cache: dict) -> pd.DataFrame:
+    def process_tmdb(self, api_df: pd.DataFrame) -> pd.DataFrame:
         """
-        Transforms TMDB JSON data into a clean DataFrame for the tmdb_data table.
+        Transforms TMDB DataFrame into a clean DataFrame for the tmdb_data table.
         
         Args:
-            tmdb_cache: A dictionary representing the TMDB cache data.
+            api_df: A Pandas DataFrame representing the TMDB data.
             
         Returns:
             A cleaned and formatted Pandas DataFrame ready for the database.
         """
-        logger.info("Processing TMDB cache into DataFrame...")
-        
-        api_data_list = list(tmdb_cache.values())
-        api_df = pd.DataFrame(api_data_list)
+        logger.info("Processing TMDB DataFrame...")
         
         if api_df.empty:
             logger.warning("TMDB cache is empty.")

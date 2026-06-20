@@ -8,7 +8,8 @@ import glob
 
 from database import DatabaseLoader
 from core.logger import get_logger
-from pipeline import load_datasets, transform_data, load_data_to_db
+from pipeline import load_datasets, process_datasets, transform_data, load_data_to_db, setup_views
+from processors import DataProcessor
 
 logger = get_logger(__name__)
 
@@ -36,10 +37,14 @@ def main():
     st.title("Data Pipeline Analytics & Processing")
     
     # Initialize session state variables
-    if 'transformed_data' not in st.session_state:
-        st.session_state.transformed_data = None
+    if 'ready_data' not in st.session_state:
+        st.session_state.ready_data = None
+    if 'rejects_data' not in st.session_state:
+        st.session_state.rejects_data = None
     if 'pipeline_config' not in st.session_state:
         st.session_state.pipeline_config = None
+    if 'data_processed' not in st.session_state:
+        st.session_state.data_processed = False
         
     st.sidebar.header("Pipeline Controls")
     
@@ -60,48 +65,63 @@ def main():
             datasets_config = config.get("datasets", [])
             datasets = load_datasets(datasets_config)
             
-            st.write("⏳ Transforming Data...")
-            transformed_data = transform_data(datasets, config)
-            
-            st.session_state.transformed_data = transformed_data
-            st.write("✅ Data Processed!")
+            st.write("⏳ Processing & Transforming Data...")
+            try:
+                processor = DataProcessor()
+                p_ready, p_rejects = process_datasets(datasets, config, processor)
+                t_ready, t_rejects = transform_data(datasets, config, processor)
+                
+                combined_ready = {**p_ready, **t_ready}
+                combined_rejects = {**p_rejects, **t_rejects}
+                
+                st.session_state.ready_data = combined_ready
+                st.session_state.rejects_data = combined_rejects
+                st.session_state.data_processed = True
+                
+                st.write("✅ Data Processed! Review the preview below.")
+                st.success("Data successfully processed! Review it and click Upload to Database.")
+            except Exception as e:
+                st.write("❌ Error Processing Data")
+                st.error(f"Error: {e}")
+                logger.exception("Failed to process data.")
+                st.session_state.data_processed = False
             
     # Display Analytics if data is processed
-    if st.session_state.transformed_data:
+    if st.session_state.data_processed and st.session_state.ready_data:
         st.header("Data Analytics & Preview")
         
-        transformed = st.session_state.transformed_data
+        ready_data = st.session_state.ready_data
         
-        # Display metrics for all transformed tables
-        cols = st.columns(len(transformed))
-        for idx, (table_name, records) in enumerate(transformed.items()):
+        # Display metrics for all extracted tables
+        cols = st.columns(max(1, len(ready_data)))
+        for idx, (table_name, data) in enumerate(ready_data.items()):
             with cols[idx]:
-                st.metric(label=f"Records ready for `{table_name}`", value=len(records))
+                st.metric(label=f"Records ready for `{table_name}`", value=len(data['valid_records']))
                 
         # Preview tables
-        for table_name, records in transformed.items():
+        for table_name, data in ready_data.items():
             st.subheader(f"Data Preview: {table_name}")
+            records = data['valid_records']
             if records:
                 df_preview = pd.DataFrame(records[:100])
                 st.dataframe(df_preview, use_container_width=True)
             else:
                 st.warning(f"No valid records for {table_name}.")
-        
+                
         st.markdown("---")
         upload_button = st.button("Upload to Database")
         
         if upload_button:
             with progress_placeholder.container():
-                st.write("✅ Data Processed!")
                 st.write("⏳ Loading to Database...")
                 try:
                     with DatabaseLoader() as loader:
-                        load_data_to_db(loader, st.session_state.transformed_data, st.session_state.pipeline_config)
+                        load_data_to_db(loader, st.session_state.ready_data, st.session_state.rejects_data)
+                        setup_views(loader, st.session_state.pipeline_config)
                     st.write("✅ Data Loaded Successfully!")
                     st.success("Pipeline completed successfully! Check the sidebar for logs.")
                     
-                    # Clear session state so they can run again if they want
-                    st.session_state.transformed_data = None
+                    st.session_state.data_processed = False
                 except Exception as e:
                     st.write("❌ Error Loading Data")
                     st.error(f"Error: {e}")

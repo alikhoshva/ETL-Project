@@ -35,10 +35,14 @@ def load_datasets(sources_config):
         
     return datasets
 
-def process_and_load_datasets(loader, datasets, config, processor):
+def process_datasets(datasets, config, processor):
     """
-    Processes and loads raw datasets into the database.
+    Processes raw datasets, enforcing schema and cleaning.
+    Returns ready_data and rejects_data.
     """
+    ready_data = {}
+    rejects_data = {}
+    
     for source in config.get('datasets', []):
         name = source.get('name')
         target_table = source.get('target_table')
@@ -56,19 +60,32 @@ def process_and_load_datasets(loader, datasets, config, processor):
         valid_records, invalid_records = processor.clean_data(df, pk=pk)
         
         if valid_records and target_table:
-            loader.load_data(target_table=target_table, valid_records=valid_records, pk=pk)
+            ready_data[name] = {
+                'target_table': target_table,
+                'valid_records': valid_records,
+                'pk': pk
+            }
             
         if invalid_records:
-            loader.load_rejects(name, invalid_records, "Validation/Schema Failed")
+            rejects_data[name] = {
+                'invalid_records': invalid_records,
+                'reason': "Validation/Schema Failed"
+            }
+            
+    return ready_data, rejects_data
 
-def transform_data(loader, datasets, config, processor):
+def transform_data(datasets, config, processor):
     """
-    Executes the data transformations and loads them to the database.
+    Executes the data transformations.
+    Returns ready_data and rejects_data.
     """
+    ready_data = {}
+    rejects_data = {}
+    
     transformations = config.get('transformations', [])
     if not transformations:
         logger.warning("No transformations defined in config.")
-        return
+        return ready_data, rejects_data
         
     for transform in transformations:
         name = transform.get('name')
@@ -105,11 +122,32 @@ def transform_data(loader, datasets, config, processor):
         valid_records, invalid_records = processor.clean_data(processed_df, pk=pk)
         
         if valid_records and target_table:
-            loader.load_data(target_table=target_table, valid_records=valid_records, pk=pk)
+            ready_data[name] = {
+                'target_table': target_table,
+                'valid_records': valid_records,
+                'pk': pk
+            }
             
         if invalid_records:
-            loader.load_rejects(name, invalid_records, "Validation Failed")
+            rejects_data[name] = {
+                'invalid_records': invalid_records,
+                'reason': "Validation Failed"
+            }
             
+    return ready_data, rejects_data
+
+def load_data_to_db(loader, ready_data, rejects_data):
+    """
+    Loads processed/transformed valid and invalid records to the database.
+    """
+    for name, data in ready_data.items():
+        if data['valid_records'] and data.get('target_table'):
+            loader.load_data(target_table=data['target_table'], valid_records=data['valid_records'], pk=data.get('pk'))
+            
+    for name, data in rejects_data.items():
+        if data['invalid_records']:
+            loader.load_rejects(name, data['invalid_records'], data.get('reason'))
+
 def setup_views(loader, config):
     for view in config.get('views', []):
         view_name = view.get('name')
@@ -134,8 +172,10 @@ def run_pipeline(loader, datasets, config):
     """
     processor = DataProcessor()
     
-    process_and_load_datasets(loader, datasets, config, processor)
+    p_ready, p_rejects = process_datasets(datasets, config, processor)
+    load_data_to_db(loader, p_ready, p_rejects)
     
-    transform_data(loader, datasets, config, processor)
+    t_ready, t_rejects = transform_data(datasets, config, processor)
+    load_data_to_db(loader, t_ready, t_rejects)
     
     setup_views(loader, config)

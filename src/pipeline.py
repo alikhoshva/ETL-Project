@@ -1,3 +1,5 @@
+"""Core ETL pipeline orchestration logic."""
+
 import pandas as pd
 import readers
 from processors import DataProcessor
@@ -6,7 +8,15 @@ from core.logger import get_logger
 logger = get_logger(__name__)
 
 def load_datasets(sources_config):
-    """Loads all datasets defined in the configuration."""
+    """
+    Loads all datasets defined in the configuration.
+    
+    Args:
+        sources_config: A list of dictionaries detailing source configurations.
+        
+    Returns:
+        A dictionary mapping dataset names to their loaded DataFrames.
+    """
     logger.info("Extracting data from configured sources...")
     datasets = {}
     
@@ -26,7 +36,17 @@ def load_datasets(sources_config):
     return datasets
 
 def run_pipeline(loader, datasets, config):
-    """Executes the data processing and loading phases based on configuration."""
+    """
+    Executes the data processing and loading phases based on configuration.
+    
+    Args:
+        loader: The DatabaseLoader instance to use for data loading.
+        datasets: A dictionary mapping dataset names to loaded DataFrames.
+        config: The complete configuration dictionary detailing transformations and views.
+        
+    Returns:
+        None
+    """
     processor = DataProcessor()
     
     transformations = config.get('transformations', [])
@@ -67,7 +87,6 @@ def run_pipeline(loader, datasets, config):
         valid_records, _ = processor.clean_data(processed_df)
         loader.load_data(target_table=target_table, valid_records=valid_records)
 
-    # Create Views
     for view in config.get('views', []):
         view_name = view.get('name')
         sql_file = view.get('sql_file')

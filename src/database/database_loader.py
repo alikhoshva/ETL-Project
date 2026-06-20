@@ -36,7 +36,15 @@ class DatabaseLoader:
         self.close()
 
     def _get_sql_type(self, value):
-        """Infers a PostgreSQL data type from a Python value."""
+        """
+        Infers a PostgreSQL data type from a Python value.
+        
+        Args:
+            value: The Python value to evaluate.
+            
+        Returns:
+            A string representing the corresponding PostgreSQL data type.
+        """
         if isinstance(value, bool):
             return "BOOLEAN"
         elif isinstance(value, int):
@@ -47,7 +55,16 @@ class DatabaseLoader:
             return "TEXT"
 
     def _ensure_table_exists(self, target_table, valid_records):
-        """Creates the table dynamically based on the data if it doesn't exist."""
+        """
+        Creates the table dynamically based on the data if it doesn't exist.
+        
+        Args:
+            target_table: The name of the target database table.
+            valid_records: A list of record dictionaries used to infer schema.
+            
+        Returns:
+            None
+        """
         sample_record = valid_records[0]
         
         column_defs = []
@@ -75,36 +92,29 @@ class DatabaseLoader:
         Args:
             target_table (str): The name of the table to insert data into.
             valid_records (list): A list of dictionaries representing the cleaned records.
+            
+        Returns:
+            None
         """
-        # 1. Check if the list is empty
         if not valid_records:
             logger.warning(f"No records provided to load for {target_table}.")
             return
 
         logger.info(f"Loading {len(valid_records)} records into {target_table}...")
         
-        # 2. Ensure the table exists before attempting to insert
         self._ensure_table_exists(target_table, valid_records)
         
-        # 3. Extract column names directly from the first dictionary
         columns = list(valid_records[0].keys())
         
-        # 3. Convert the list of dicts into a list of tuples (required by psycopg2)
-        # We ensure the values are fetched in the exact order of the columns
         values = [tuple(record[col] for col in columns) for record in valid_records]
         
-        # 4. Construct the query for execute_values
-        # Note: execute_values expects a single %s at the end
         insert_query = sql.SQL("INSERT INTO {table} ({fields}) VALUES %s").format(
             table=sql.Identifier(target_table),
             fields=sql.SQL(", ").join(map(sql.Identifier, columns))
         )
 
-        # Using the connection as a context manager automatically handles commit/rollback
         with self.db_connection:
             with self.db_connection.cursor() as cursor:
-                # 5. Use execute_values for high-performance bulk insertion
-                # Converting the SQL object to a string ensures maximum compatibility
                 query_string = insert_query.as_string(cursor)
                 execute_values(cursor, query_string, values)
         
@@ -117,6 +127,9 @@ class DatabaseLoader:
         Args:
             view_name (str): The name of the view to create.
             query (str): The CREATE VIEW SQL query.
+            
+        Returns:
+            None
         """
         logger.info(f"Creating view '{view_name}'...")
         with self.db_connection:

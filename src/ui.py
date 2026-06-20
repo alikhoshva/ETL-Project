@@ -1,3 +1,5 @@
+"""Streamlit user interface for the ETL Data Uploader."""
+
 import streamlit as st
 import pandas as pd
 import readers
@@ -12,7 +14,6 @@ def process_file(uploaded_file, file_type, table_name):
         loader = DatabaseLoader()
         with loader:
             my_worker = readers.get_reader(file_type)
-            # pandas read_csv and read_json accept file-like objects like uploaded_file
             raw_data = my_worker.read_file(uploaded_file)
             
             if not isinstance(raw_data, pd.DataFrame):

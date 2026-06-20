@@ -7,32 +7,36 @@ logger = get_logger(__name__)
 class DataProcessor:
     def __init__(self, validation_rules: List[Callable] = None):
         """
+        Initializes the data processor with optional validation rules.
+        
         Args:
             validation_rules: A list of functions. Each function must accept a 
                               Pandas DataFrame and return a Boolean Series (a mask).
         """
-        # If no rules are provided, default to an empty list
         self.validation_rules = validation_rules or []
         
     def clean_data(self, raw_data: pd.DataFrame):
+        """
+        Applies basic cleaning and dynamic validation rules to the raw data.
+        
+        Args:
+            raw_data: The input Pandas DataFrame to be cleaned.
+            
+        Returns:
+            A tuple containing a list of valid records and a list of invalid records.
+        """
         logger.info("Transforming and cleaning data...")
 
-        # Basic universal cleaning
         cleaned_data = raw_data.dropna().drop_duplicates()
         
-        # If no rules were passed, everything is valid
         if not self.validation_rules:
             return cleaned_data.to_dict('records'), []
 
-        # Start with a mask where EVERY row is considered True (Valid)
         overall_mask = pd.Series(True, index=cleaned_data.index)
         
-        # Apply each rule dynamically
         for rule in self.validation_rules:
-            # Combine the masks using bitwise AND (&)
             overall_mask = overall_mask & rule(cleaned_data)
             
-        # Split the data based on the final combined mask
         valid_df = cleaned_data[overall_mask]
         invalid_df = cleaned_data[~overall_mask] 
         
@@ -46,14 +50,21 @@ class DataProcessor:
     def merge_datasets(self, left_df: pd.DataFrame, right_df: pd.DataFrame, on: str, how: str) -> pd.DataFrame:
         """
         Generically merges two datasets and performs basic cleanup.
+        
+        Args:
+            left_df: The left Pandas DataFrame for the merge.
+            right_df: The right Pandas DataFrame for the merge.
+            on: The column name to join on.
+            how: The type of merge to perform (e.g., 'inner', 'left').
+            
+        Returns:
+            The merged Pandas DataFrame.
         """
         logger.info(f"Merging datasets on '{on}' using '{how}' join...")
         
-        # Drop missing primary keys before merge to avoid issues
         left_df = left_df.dropna(subset=[on]).drop_duplicates(subset=[on])
         right_df = right_df.dropna(subset=[on]).drop_duplicates(subset=[on])
         
-        # Merge
         merged_df = pd.merge(left_df, right_df, on=on, how=how)
         
         cols_to_cast = [c for c in ['imdbId', 'tmdbId'] if c in merged_df.columns]
@@ -69,10 +80,15 @@ class DataProcessor:
     def process_tmdb(self, tmdb_cache: dict) -> pd.DataFrame:
         """
         Transforms TMDB JSON data into a clean DataFrame for the tmdb_data table.
+        
+        Args:
+            tmdb_cache: A dictionary representing the TMDB cache data.
+            
+        Returns:
+            A cleaned and formatted Pandas DataFrame ready for the database.
         """
         logger.info("Processing TMDB cache into DataFrame...")
         
-        # Convert dictionary to list of records
         api_data_list = list(tmdb_cache.values())
         api_df = pd.DataFrame(api_data_list)
         
@@ -80,7 +96,6 @@ class DataProcessor:
             logger.warning("TMDB cache is empty.")
             return pd.DataFrame(columns=['tmdbId', 'budget', 'api_genres', 'production_companies'])
             
-        # Parse nested JSON arrays into pipe-separated strings
         if 'genres' in api_df.columns:
             api_df['api_genres'] = api_df['genres'].apply(
                 lambda x: '|'.join([g['name'] for g in x]) if isinstance(x, list) else None
@@ -98,15 +113,12 @@ class DataProcessor:
         if 'budget' not in api_df.columns:
             api_df['budget'] = None
             
-        # Rename 'id' to 'tmdbId'
         if 'id' in api_df.columns:
             api_df = api_df.rename(columns={'id': 'tmdbId'})
             
-        # Drop missing primary keys and deduplicate
         api_df = api_df.dropna(subset=['tmdbId']).drop_duplicates(subset=['tmdbId'])
         api_df['tmdbId'] = api_df['tmdbId'].astype('Int64')
         
-        # Keep only necessary columns
         cols_to_keep = ['tmdbId', 'budget', 'api_genres', 'production_companies']
         api_df = api_df[cols_to_keep]
         

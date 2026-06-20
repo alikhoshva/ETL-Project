@@ -11,6 +11,12 @@ os.makedirs(LOG_DIR, exist_ok=True)
 def get_logger(name):
     """
     Returns a configured logger with the given name.
+    
+    Args:
+        name: The name for the logger instance.
+        
+    Returns:
+        A configured logging.Logger object.
     """
     logger = logging.getLogger(name)
     

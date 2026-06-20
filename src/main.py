@@ -1,3 +1,5 @@
+"""Main entry point for running the ETL pipeline."""
+
 import yaml
 from database import DatabaseLoader
 from core.logger import get_logger
@@ -6,7 +8,10 @@ from pipeline import load_datasets, run_pipeline
 logger = get_logger(__name__)
 
 def main():
-    # 1. Configuration Loading Phase
+    """
+    Main entry point for the ETL pipeline.
+    """
+    # Configuration Loading Phase
     with open("config/sources.yml", "r") as f:
         config = yaml.safe_load(f)
         
@@ -16,10 +21,10 @@ def main():
         logger.critical("No datasets found in config.")
         return
 
-    # 2. Data Extraction Phase
+    # Data Extraction Phase
     datasets = load_datasets(datasets_config)
 
-    # 3. Processing and Loading Phase
+    # Processing and Loading Phase
     with DatabaseLoader() as loader:
         run_pipeline(loader, datasets, config)
 

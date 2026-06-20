@@ -35,19 +35,19 @@ def load_datasets(sources_config):
         
     return datasets
 
-def run_pipeline(loader, datasets, config):
+def transform_data(datasets, config):
     """
-    Executes the data processing and loading phases based on configuration.
+    Executes the data transformations based on configuration.
     
     Args:
-        loader: The DatabaseLoader instance to use for data loading.
         datasets: A dictionary mapping dataset names to loaded DataFrames.
-        config: The complete configuration dictionary detailing transformations and views.
+        config: The complete configuration dictionary detailing transformations.
         
     Returns:
-        None
+        A dictionary mapping target table names to their valid_records lists.
     """
     processor = DataProcessor()
+    transformed_records = {}
     
     transformations = config.get('transformations', [])
     if not transformations:
@@ -85,6 +85,20 @@ def run_pipeline(loader, datasets, config):
             raise ValueError(f"Unknown transformation type: {t_type}")
             
         valid_records, _ = processor.clean_data(processed_df)
+        transformed_records[target_table] = valid_records
+        
+    return transformed_records
+
+def load_data_to_db(loader, transformed_records, config):
+    """
+    Loads transformed data into the database and creates views.
+    
+    Args:
+        loader: The DatabaseLoader instance to use for data loading.
+        transformed_records: A dict mapping target table names to lists of valid records.
+        config: The complete configuration dictionary detailing views.
+    """
+    for target_table, valid_records in transformed_records.items():
         loader.load_data(target_table=target_table, valid_records=valid_records)
 
     for view in config.get('views', []):
@@ -95,3 +109,18 @@ def run_pipeline(loader, datasets, config):
         with open(sql_file, 'r') as f:
             view_query = f.read()
         loader.create_view(view_name, view_query)
+
+def run_pipeline(loader, datasets, config):
+    """
+    Executes the data processing and loading phases based on configuration.
+    
+    Args:
+        loader: The DatabaseLoader instance to use for data loading.
+        datasets: A dictionary mapping dataset names to loaded DataFrames.
+        config: The complete configuration dictionary detailing transformations and views.
+        
+    Returns:
+        None
+    """
+    transformed_records = transform_data(datasets, config)
+    load_data_to_db(loader, transformed_records, config)

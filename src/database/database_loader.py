@@ -47,32 +47,53 @@ class DatabaseLoader:
         Returns:
             A string representing the corresponding PostgreSQL data type.
         """
-        if isinstance(value, bool):
+        import numpy as np
+        if isinstance(value, (bool, np.bool_)):
             return "BOOLEAN"
-        elif isinstance(value, int):
+        elif isinstance(value, (int, np.integer)):
             return "BIGINT"
-        elif isinstance(value, float):
+        elif isinstance(value, (float, np.floating)):
+            import math
+            if math.isnan(value):
+                return "TEXT"
             return "DOUBLE PRECISION"
         else:
             return "TEXT"
 
-    def _ensure_table_exists(self, target_table, valid_records, pk=None):
+    def _ensure_table_exists(self, target_table, df, pk=None):
         """
         Creates the table dynamically based on the data if it doesn't exist.
         
         Args:
             target_table: The name of the target database table.
-            valid_records: A list of record dictionaries used to infer schema.
+            df (pd.DataFrame): The Pandas DataFrame used to infer schema.
             pk: Optional primary key column name.
             
         Returns:
             None
         """
-        sample_record = valid_records[0]
-        
+        import pandas as pd
+        import numpy as np
+
+        if df.empty:
+            return
+
         column_defs = []
-        for col_name, value in sample_record.items():
-            sql_type = self._get_sql_type(value)
+        for col_name in df.columns:
+            col_dtype = df[col_name].dtype
+            non_null_series = df[col_name].dropna()
+            sample_val = non_null_series.iloc[0] if not non_null_series.empty else None
+
+            # Infer SQL type
+            if pd.api.types.is_bool_dtype(col_dtype) or isinstance(sample_val, (bool, np.bool_)):
+                sql_type = "BOOLEAN"
+            elif pd.api.types.is_integer_dtype(col_dtype) or isinstance(sample_val, (int, np.integer)):
+                sql_type = "BIGINT"
+            elif pd.api.types.is_float_dtype(col_dtype) or isinstance(sample_val, (float, np.floating)):
+                sql_type = "DOUBLE PRECISION"
+            else:
+                sql_type = "TEXT"
+
             if pk and col_name == pk:
                 col_def = sql.SQL("{} {} PRIMARY KEY").format(
                     sql.Identifier(col_name),
@@ -95,83 +116,98 @@ class DatabaseLoader:
         self.db_connection.commit()
         logger.info(f"Ensured table '{target_table}' exists with inferred schema.")
 
-    def load_data(self, target_table, valid_records, pk=None):
+    def load_data(self, target_table, df, pk=None):
         """
-        Loads records into the target database table.
+        Loads records from a Pandas DataFrame into the target database table.
         
         Args:
             target_table (str): The name of the table to insert data into.
-            valid_records (list): A list of dictionaries representing the cleaned records.
+            df (pd.DataFrame): The Pandas DataFrame containing clean records.
             pk (str): Optional primary key to use for UPSERT (ON CONFLICT DO UPDATE).
             
         Returns:
             None
         """
-        if not valid_records:
+        if df.empty:
             logger.warning(f"No records provided to load for {target_table}.")
             return
 
-        logger.info(f"Loading {len(valid_records)} records into {target_table}...")
+        logger.info(f"Loading {len(df)} records into {target_table}...")
         
-        self._ensure_table_exists(target_table, valid_records, pk)
+        self._ensure_table_exists(target_table, df, pk)
         
-        columns = list(valid_records[0].keys())
+        columns = list(df.columns)
         
-        values = [tuple(record[col] for col in columns) for record in valid_records]
+        import io
+        temp_table = f"temp_{target_table}"
+        
+        fields = sql.SQL(", ").join(map(sql.Identifier, columns))
+        conflict_clause = sql.SQL("")
         
         if pk and pk in columns:
-            insert_query = sql.SQL("""
-                INSERT INTO {table} ({fields}) VALUES %s
-                ON CONFLICT ({pk}) DO UPDATE SET
-                {updates}
-            """).format(
-                table=sql.Identifier(target_table),
-                fields=sql.SQL(", ").join(map(sql.Identifier, columns)),
-                pk=sql.Identifier(pk),
-                updates=sql.SQL(", ").join(
-                    sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(k), sql.Identifier(k)) 
-                    for k in columns if k != pk
-                )
+            updates = sql.SQL(", ").join(
+                sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(k), sql.Identifier(k)) 
+                for k in columns if k != pk
             )
-        else:
-            insert_query = sql.SQL("INSERT INTO {table} ({fields}) VALUES %s").format(
-                table=sql.Identifier(target_table),
-                fields=sql.SQL(", ").join(map(sql.Identifier, columns))
+            conflict_clause = sql.SQL("ON CONFLICT ({}) DO UPDATE SET {}").format(
+                sql.Identifier(pk),
+                updates
             )
+            
+        insert_query = sql.SQL("""
+            INSERT INTO {table} ({fields})
+            SELECT {fields} FROM {temp_table}
+            {conflict}
+        """).format(
+            table=sql.Identifier(target_table),
+            temp_table=sql.Identifier(temp_table),
+            fields=fields,
+            conflict=conflict_clause
+        )
 
         with self.db_connection:
             with self.db_connection.cursor() as cursor:
-                query_string = insert_query.as_string(cursor)
-                execute_values(cursor, query_string, values)
+                cursor.execute(sql.SQL("CREATE TEMP TABLE {} (LIKE {} INCLUDING DEFAULTS) ON COMMIT DROP").format(
+                    sql.Identifier(temp_table),
+                    sql.Identifier(target_table)
+                ))
+                
+                buffer = io.StringIO()
+                df.to_csv(buffer, index=False, header=False, na_rep='\\N', sep='\t')
+                buffer.seek(0)
+                cursor.copy_expert(f"COPY {temp_table} FROM STDIN WITH (FORMAT csv, DELIMITER '\t', NULL '\\N')", buffer)
+                
+                cursor.execute(insert_query)
         
-        logger.info(f"Successfully loaded and committed {len(valid_records)} records to {target_table}!")
+        logger.info(f"Successfully loaded and committed {len(df)} records to {target_table}!")
 
-    def create_view(self, view_name, query):
+    def setup_views(self):
         """
-        Executes a SQL query to create a database view.
+        Executes the SQL query from config/sql/movies_enriched_view.sql to create the view.
+        """
+        logger.info(f"Setting up view from config/sql/movies_enriched_view.sql...")
         
-        Args:
-            view_name (str): The name of the view to create.
-            query (str): The CREATE VIEW SQL query.
+        try:
+            with open('config/sql/movies_enriched_view.sql', 'r') as f:
+                query = f.read()
+        except FileNotFoundError:
+            logger.error("Could not find config/sql/movies_enriched_view.sql")
+            return
             
-        Returns:
-            None
-        """
-        logger.info(f"Creating view '{view_name}'...")
         with self.db_connection:
             with self.db_connection.cursor() as cursor:
                 cursor.execute(query)
-        logger.info(f"Successfully created view '{view_name}'!")
+        logger.info("Successfully created view 'movies_enriched_view'!")
 
-    def load_rejects(self, source_name, invalid_records, reason="Validation Failed"):
+    def load_rejects(self, source_name, df, reason="Validation Failed"):
         """
         Loads rejected records into the stg_rejects table.
         """
-        if not invalid_records:
+        if df.empty:
             return
 
         import json
-        logger.info(f"Loading {len(invalid_records)} rejected records from {source_name} into stg_rejects...")
+        logger.info(f"Loading {len(df)} rejected records from {source_name} into stg_rejects...")
         
         create_query = """
         CREATE TABLE IF NOT EXISTS stg_rejects (
@@ -186,17 +222,9 @@ class DatabaseLoader:
             cursor.execute(create_query)
         self.db_connection.commit()
         
-        import math
-        def clean_nan(obj):
-            if isinstance(obj, dict):
-                return {k: clean_nan(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [clean_nan(v) for v in obj]
-            elif isinstance(obj, float) and math.isnan(obj):
-                return None
-            return obj
-            
-        values = [(source_name, reason, json.dumps(clean_nan(record))) for record in invalid_records]
+        # Serialize DataFrame rows to JSON strings via fast C-level to_json
+        json_records = json.loads(df.to_json(orient='records'))
+        values = [(source_name, reason, Json(rec)) for rec in json_records]
         
         insert_query = "INSERT INTO stg_rejects (source_name, reject_reason, record_payload) VALUES %s"
         
@@ -204,4 +232,4 @@ class DatabaseLoader:
             with self.db_connection.cursor() as cursor:
                 execute_values(cursor, insert_query, values)
                 
-        logger.info(f"Successfully logged {len(invalid_records)} rejects to stg_rejects.")
+        logger.info(f"Successfully logged {len(df)} rejects to stg_rejects.")

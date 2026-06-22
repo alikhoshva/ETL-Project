@@ -56,7 +56,7 @@ class DataProcessor:
         logger.info("Transforming and cleaning data...")
 
         if raw_data.empty:
-            return [], []
+            return pd.DataFrame(), pd.DataFrame()
 
         overall_mask = pd.Series(True, index=raw_data.index)
         
@@ -74,42 +74,30 @@ class DataProcessor:
         valid_df = raw_data[overall_mask]
         invalid_df = raw_data[~overall_mask] 
         
-        valid_records = valid_df.to_dict('records')
-        invalid_records = invalid_df.to_dict('records')
+        logger.info(f"Validation complete: {len(valid_df)} valid, {len(invalid_df)} invalid.")
         
-        logger.info(f"Validation complete: {len(valid_records)} valid, {len(invalid_records)} invalid.")
+        return valid_df, invalid_df
         
-        return valid_records, invalid_records
-
-    def merge_datasets(self, left_df: pd.DataFrame, right_df: pd.DataFrame, on: str, how: str) -> pd.DataFrame:
+    def process_movies_and_links(self, movies_df: pd.DataFrame, links_df: pd.DataFrame) -> pd.DataFrame:
         """
-        Generically merges two datasets and performs basic cleanup.
-        
-        Args:
-            left_df: The left Pandas DataFrame for the merge.
-            right_df: The right Pandas DataFrame for the merge.
-            on: The column name to join on.
-            how: The type of merge to perform (e.g., 'inner', 'left').
-            
-        Returns:
-            The merged Pandas DataFrame.
+        Merges movies and links datasets, performing specific cleanups for this combined entity.
         """
-        logger.info(f"Merging datasets on '{on}' using '{how}' join...")
+        logger.info("Merging movies and links datasets...")
         
-        left_df = left_df.dropna(subset=[on]).drop_duplicates(subset=[on])
-        right_df = right_df.dropna(subset=[on]).drop_duplicates(subset=[on])
+        left_df = movies_df.dropna(subset=['movieId']).drop_duplicates(subset=['movieId'])
+        right_df = links_df.dropna(subset=['movieId']).drop_duplicates(subset=['movieId'])
         
-        merged_df = pd.merge(left_df, right_df, on=on, how=how)
+        merged_df = pd.merge(left_df, right_df, on='movieId', how='inner')
         
         cols_to_cast = [c for c in ['imdbId', 'tmdbId'] if c in merged_df.columns]
         if cols_to_cast:
             merged_df[cols_to_cast] = merged_df[cols_to_cast].astype('Int64')
                 
-        # Drop missing titles if title exists (specific cleanup, ideally this goes into a separate clean step but keeping here for simplicity)
         if 'title' in merged_df.columns:
             merged_df = merged_df.dropna(subset=['title'])
             
         return merged_df
+
         
     def process_tmdb(self, api_df: pd.DataFrame) -> pd.DataFrame:
         """

@@ -27,27 +27,15 @@ def test_data_processor_clean_data(raw_data):
     assert len(valid) == 3
     assert len(invalid) == 3
     
-    invalid_names = [v['name'] for v in invalid]
+    invalid_names = invalid['name'].tolist()
     assert 'Charlie' in invalid_names
     assert 'Bob' in invalid_names
     assert 'Eve' in invalid_names
-    valid_names = [v['name'] for v in valid]
+    valid_names = valid['name'].tolist()
     assert 'Alice' in valid_names
     assert 'Bob' in valid_names
     assert 'Dave' in valid_names
     assert 'Eve' not in valid_names
-
-def test_data_processor_merge_datasets():
-    left_df = pd.DataFrame({'id': [1, 2], 'val_left': ['A', 'B']})
-    right_df = pd.DataFrame({'id': [2, 3], 'val_right': ['X', 'Y']})
-    
-    processor = DataProcessor()
-    merged_df = processor.merge_datasets(left_df, right_df, on='id', how='inner')
-    
-    assert len(merged_df) == 1
-    assert merged_df.iloc[0]['id'] == 2
-    assert merged_df.iloc[0]['val_left'] == 'B'
-    assert merged_df.iloc[0]['val_right'] == 'X'
 
 def test_data_processor_process_tmdb():
     tmdb_cache = pd.DataFrame([{

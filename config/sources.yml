@@ -27,24 +27,6 @@ datasets:
       title: str
       budget: float
     
-transformations:
-  - name: process_movies_and_links
-    type: merge
-    left_dataset: movies
-    right_dataset: links
-    join_on: movieId
-    how: inner
-    target_table: movies
-    pk: movieId
-    
-  - name: process_tmdb_cache
-    type: custom_python
-    function: process_tmdb
-    input_dataset: tmdb
-    target_table: tmdb_data
-    pk: tmdbId
 
-views:
-  - name: movies_enriched_view
-    sql_file: config/sql/movies_enriched_view.sql
+
 

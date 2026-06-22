@@ -33,6 +33,6 @@ class TestJSONReader:
     def test_read_valid_json(self, sample_json):
         reader = JSONReader()
         data = reader.read_file(sample_json)
-        assert data
+        assert not data.empty
         assert len(data) == 2
-        assert "name" in data[0]
+        assert "name" in data.columns

@@ -57,7 +57,8 @@ def process_datasets(datasets, config, processor):
         
         df = processor.enforce_schema(df, schema)
         
-        valid_df, invalid_df = processor.clean_data(df, pk=pk)
+        required_cols = list(schema.keys()) if schema else None
+        valid_df, invalid_df = processor.clean_data(df, pk=pk, required_cols=required_cols)
         
         if not valid_df.empty and target_table:
             ready_data[name] = {
@@ -91,7 +92,7 @@ def transform_datasets(datasets, processor):
         merged_df = processor.process_movies_and_links(movies_df, links_df)
 
             
-        valid_df, invalid_df = processor.clean_data(merged_df, pk='movieId')
+        valid_df, invalid_df = processor.clean_data(merged_df, pk='movieId', required_cols=['movieId', 'title', 'imdbId', 'tmdbId'])
         
         if not valid_df.empty:
             ready_data['movies'] = {
@@ -110,7 +111,7 @@ def transform_datasets(datasets, processor):
         logger.info("Executing transformation: process_tmdb_cache (Type: custom_python)")
         tmdb_df = processor.process_tmdb(datasets['tmdb'])
         
-        valid_df, invalid_df = processor.clean_data(tmdb_df, pk='tmdbId')
+        valid_df, invalid_df = processor.clean_data(tmdb_df, pk='tmdbId', required_cols=['tmdbId', 'budget'])
         
         if not valid_df.empty:
             ready_data['tmdb_data'] = {
@@ -138,16 +139,41 @@ def load_data_to_db(loader, ready_data, rejects_data):
         if not data['invalid_df'].empty:
             loader.load_rejects(name, data['invalid_df'], data.get('reason'))
 
+def process_and_transform_datasets(datasets, config, processor):
+    """
+    Processes raw datasets and executes data transformations.
+    Returns tuples of (p_ready, p_rejects, t_ready, t_rejects).
+    """
+    p_ready, p_rejects = process_datasets(datasets, config, processor)
+    
+    # Use cleaned datasets for the transformation phase to avoid reprocessing
+    # or double-counting records that were already filtered out in the staging phase.
+    clean_datasets = {}
+    for name, data in p_ready.items():
+        clean_datasets[name] = data['valid_df']
+    for name in datasets:
+        if name not in clean_datasets:
+            # Fall back to an empty DataFrame with the configured schema columns rather than the raw data
+            schema = next((s.get('schema') for s in config.get('datasets', []) if s.get('name') == name), None)
+            cols = list(schema.keys()) if schema else datasets[name].columns
+            clean_datasets[name] = pd.DataFrame(columns=cols)
+            
+    t_ready, t_rejects = transform_datasets(clean_datasets, processor)
+    return p_ready, p_rejects, t_ready, t_rejects
+
 def run_pipeline(loader, datasets, config):
     """
     Executes the data processing and loading phases based on configuration.
     """
     processor = DataProcessor()
+    p_ready, p_rejects, t_ready, t_rejects = process_and_transform_datasets(datasets, config, processor)
     
-    p_ready, p_rejects = process_datasets(datasets, config, processor)
-    load_data_to_db(loader, p_ready, p_rejects)
-    
-    t_ready, t_rejects = transform_datasets(datasets, processor)
-    load_data_to_db(loader, t_ready, t_rejects)
-    
-    loader.setup_views()
+    # Wrap database ingestion in a single atomic transaction block
+    try:
+        with loader.db_connection:
+            load_data_to_db(loader, p_ready, p_rejects)
+            load_data_to_db(loader, t_ready, t_rejects)
+            loader.setup_views()
+    except Exception as e:
+        logger.error(f"Database transaction failed: {e}")
+        raise e

@@ -1,10 +1,8 @@
 import logging
 import os
-from datetime import datetime
+from logging.handlers import RotatingFileHandler
 import config
 
-# Initialize run variables globally so all loggers share the same timestamp
-_run_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -29,15 +27,15 @@ def get_logger(name):
         
         formatter = logging.Formatter('[%(asctime)s] [%(levelname)-8s] [%(name)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-        # Create main file handler
-        main_log_path = os.path.join(LOG_DIR, f'pipeline_{_run_timestamp}.log')
-        file_handler = logging.FileHandler(main_log_path, mode='a')
+        # Create main rotating file handler (5MB max, keep 5 backups)
+        main_log_path = os.path.join(LOG_DIR, 'pipeline.log')
+        file_handler = RotatingFileHandler(main_log_path, maxBytes=5 * 1024 * 1024, backupCount=5, delay=True)
         file_handler.setLevel(log_level)
         file_handler.setFormatter(formatter)
         
-        # Create error file handler
-        error_log_path = os.path.join(LOG_DIR, f'errors_{_run_timestamp}.log')
-        error_handler = logging.FileHandler(error_log_path, mode='a')
+        # Create rotating error file handler (5MB max, keep 5 backups)
+        error_log_path = os.path.join(LOG_DIR, 'errors.log')
+        error_handler = RotatingFileHandler(error_log_path, maxBytes=5 * 1024 * 1024, backupCount=5, delay=True)
         error_handler.setLevel(logging.WARNING)
         error_handler.setFormatter(formatter)
         

@@ -13,7 +13,33 @@ class DataProcessor:
             validation_rules: A list of functions. Each function must accept a 
                               Pandas DataFrame and return a Boolean Series (a mask).
         """
-        self.validation_rules = validation_rules or []
+        self.validation_rules = (
+            validation_rules 
+            if validation_rules is not None 
+            else self._get_default_rules()
+        )
+        
+    def _get_default_rules(self) -> List[Callable]:
+        """Returns default strict business validation rules."""
+        def rule_positive_ids(df: pd.DataFrame) -> pd.Series:
+            mask = pd.Series(True, index=df.index)
+            for col in ['movieId', 'id', 'tmdbId', 'imdbId']:
+                if col in df.columns:
+                    nums = pd.to_numeric(df[col], errors='coerce')
+                    # Only enforce positive values for non-null IDs (missing optional IDs are allowed)
+                    mask = mask & ((nums > 0) | nums.isna())
+            return mask
+
+        def rule_non_empty_title(df: pd.DataFrame) -> pd.Series:
+            if 'title' in df.columns:
+                # Require title is not null/None and not empty/blank string after stripping
+                return df['title'].notna() & (df['title'].astype(str).str.strip() != "")
+            return pd.Series(True, index=df.index)
+
+        return [
+            rule_positive_ids,
+            rule_non_empty_title
+        ]
         
     def enforce_schema(self, df: pd.DataFrame, schema: dict) -> pd.DataFrame:
         """
@@ -42,13 +68,40 @@ class DataProcessor:
                         df[col] = df[col].astype(str).astype(pd_type)
         return df
 
-    def clean_data(self, raw_data: pd.DataFrame, pk: str = None):
+    def clean_values(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Cleans data values in-place (e.g. stripping strings, converting empty strings 
+        and placeholders like 0 budgets or "(no genres listed)" to None/NaN).
+        """
+        df = df.copy()
+        
+        # 1. Clean string columns: strip whitespace and convert empty/whitespace strings to None
+        for col in df.columns:
+            if df[col].dtype == 'object' or isinstance(df[col].dtype, pd.StringDtype):
+                df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+                df[col] = df[col].apply(lambda x: None if isinstance(x, str) and x.strip() == "" else x)
+                
+        # 2. Standardize genres: convert "(no genres listed)" to None
+        if 'genres' in df.columns:
+            df['genres'] = df['genres'].apply(
+                lambda x: None if isinstance(x, str) and x.strip().lower() == "(no genres listed)" else x
+            )
+            
+        # 3. Clean numeric columns: replace <= 0 with None for optional fields like budget
+        if 'budget' in df.columns:
+            nums = pd.to_numeric(df['budget'], errors='coerce')
+            df['budget'] = nums.where(nums > 0, None)
+            
+        return df
+
+    def clean_data(self, raw_data: pd.DataFrame, pk: str = None, required_cols: List[str] = None):
         """
         Applies basic cleaning and dynamic validation rules to the raw data.
         
         Args:
             raw_data: The input Pandas DataFrame to be cleaned.
-            pk: The primary key column to use for deduplication.
+            pk: The primary key column to use for deduplication and non-null check.
+            required_cols: Optional list of columns that must not contain null values.
             
         Returns:
             A tuple containing a list of valid records and a list of invalid records.
@@ -58,21 +111,33 @@ class DataProcessor:
         if raw_data.empty:
             return pd.DataFrame(), pd.DataFrame()
 
-        overall_mask = pd.Series(True, index=raw_data.index)
+        # Pre-clean string/numeric values and handle placeholder conversions
+        cleaned_data = self.clean_values(raw_data)
+
+        overall_mask = pd.Series(True, index=cleaned_data.index)
         
-        overall_mask = overall_mask & ~raw_data.isna().any(axis=1)
-        
-        if pk and pk in raw_data.columns:
-            overall_mask = overall_mask & ~raw_data.duplicated(subset=[pk], keep='first')
+        # Validate null values only on required columns or primary key to avoid dropping
+        # rows with null values in optional/unused metadata columns.
+        cols_to_check = required_cols if required_cols is not None else ([pk] if pk else None)
+        if cols_to_check is not None:
+            cols_to_check = [c for c in cols_to_check if c in cleaned_data.columns]
+            if cols_to_check:
+                overall_mask = overall_mask & ~cleaned_data[cols_to_check].isna().any(axis=1)
         else:
-            overall_mask = overall_mask & ~raw_data.duplicated(keep='first')
+            # Fallback to original behavior if no validation targets are specified
+            overall_mask = overall_mask & ~cleaned_data.isna().any(axis=1)
+        
+        if pk and pk in cleaned_data.columns:
+            overall_mask = overall_mask & ~cleaned_data.duplicated(subset=[pk], keep='first')
+        else:
+            overall_mask = overall_mask & ~cleaned_data.duplicated(keep='first')
             
         if self.validation_rules:
             for rule in self.validation_rules:
-                overall_mask = overall_mask & rule(raw_data)
+                overall_mask = overall_mask & rule(cleaned_data)
             
-        valid_df = raw_data[overall_mask]
-        invalid_df = raw_data[~overall_mask] 
+        valid_df = cleaned_data[overall_mask]
+        invalid_df = cleaned_data[~overall_mask] 
         
         logger.info(f"Validation complete: {len(valid_df)} valid, {len(invalid_df)} invalid.")
         

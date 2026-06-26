@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+.vscode
+.devcontainer
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+tests/
+logs/*.log

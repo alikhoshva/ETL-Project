@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: movie_etl_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-myuser}
+      POSTGRES_PASSWORD: ${DB_PASS:-mypassword}
+      POSTGRES_DB: ${DB_NAME:-mydatabase}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-myuser} -d ${DB_NAME:-mydatabase}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  streamlit:
+    build: .
+    container_name: movie_etl_streamlit
+    restart: unless-stopped
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-mydatabase}
+      DB_USER: ${DB_USER:-myuser}
+      DB_PASS: ${DB_PASS:-mypassword}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

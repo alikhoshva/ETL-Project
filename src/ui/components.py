@@ -51,7 +51,7 @@ def render_ingestion_quality_chart(ready_data, rejects_data):
         chart = alt.Chart(df_chart).mark_bar(cornerRadiusEnd=4).encode(
             y=alt.Y('Dataset:N', title=None, axis=alt.Axis(labelFontSize=11)),
             x=alt.X('Count:Q', stack='normalize', title='Ingestion Quality Ratio', axis=alt.Axis(format='%', grid=True)),
-            color=alt.Color('Status:N', scale=color_scale, legend=alt.Legend(title=None, orient="top-right", direction="horizontal")),
+            color=alt.Color('Status:N', scale=color_scale, legend=alt.Legend(title=None, orient="bottom", direction="horizontal")),
             tooltip=[
                 'Dataset:N', 
                 'Status:N', 
@@ -59,7 +59,7 @@ def render_ingestion_quality_chart(ready_data, rejects_data):
                 alt.Tooltip('Percentage:Q', format='.1%', title='Percentage')
             ]
         ).properties(
-            height=200
+            height=250
         ).configure_view(
             strokeWidth=0
         )
@@ -149,18 +149,23 @@ def render_budget_leaderboard(ready_data):
                 else:
                     st.info("No movie budget data available.")
 
+@st.cache_data(ttl=10)
+def get_enriched_view_data(data_uploaded):
+    """Queries the enriched view from the database using a cached function."""
+    from database import DatabaseLoader
+    with DatabaseLoader() as loader:
+        with loader.db_connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM movies_enriched_view LIMIT 10")
+            colnames = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            return pd.DataFrame(rows, columns=colnames)
+
 def render_db_view_tab(data_uploaded):
     """Renders the database view verification tab contents."""
-    from database import DatabaseLoader
     st.markdown("<h4 style='font-weight:600; margin-bottom: 15px;'>PostgreSQL View Verification</h4>", unsafe_allow_html=True)
     if data_uploaded:
         try:
-            with DatabaseLoader() as loader:
-                with loader.db_connection.cursor() as cursor:
-                    cursor.execute("SELECT * FROM movies_enriched_view LIMIT 10")
-                    colnames = [desc[0] for desc in cursor.description]
-                    rows = cursor.fetchall()
-                    df_enriched = pd.DataFrame(rows, columns=colnames)
+            df_enriched = get_enriched_view_data(data_uploaded)
             if not df_enriched.empty:
                 st.success("Successfully queried `movies_enriched_view` view from database!")
                 st.dataframe(df_enriched, width="stretch")

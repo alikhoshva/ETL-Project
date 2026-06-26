@@ -25,13 +25,23 @@ def load_config():
     with open(config_path, 'r') as file:
         return yaml.safe_load(file)
 
+@st.cache_data(ttl=10)
 def check_db_connection():
     """Checks connection status to the PostgreSQL database."""
+    import psycopg2
+    import config
     try:
-        loader = DatabaseLoader()
-        with loader.db_connection.cursor() as cursor:
+        conn = psycopg2.connect(
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+            user=config.DB_USER,
+            password=config.DB_PASS,
+            connect_timeout=3
+        )
+        with conn.cursor() as cursor:
             cursor.execute("SELECT 1")
-        loader.close()
+        conn.close()
         return True
     except Exception:
         return False
@@ -40,7 +50,7 @@ def main():
     st.set_page_config(page_title="ETL Data Pipeline", layout="wide")
     inject_custom_css()
     
-    st.markdown('<h1 class="main-header">🎬 Enterprise ETL Data Pipeline</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">🎬 ETL Data Pipeline</h1>', unsafe_allow_html=True)
     st.markdown('<p class="main-subtitle">Monitor, process, and load entertainment datasets into analytical databases</p>', unsafe_allow_html=True)
     
     # Initialize session state variables

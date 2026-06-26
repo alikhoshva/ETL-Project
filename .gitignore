@@ -7,3 +7,4 @@ app.log
 .pytest_cache/
 .coverage
 logs/
+slides_prep/
